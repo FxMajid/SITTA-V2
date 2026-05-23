@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stok Bahan Ajar — SITTA UT</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="navbar-brand">
+    <div class="logo-icon">S</div>
+    SITTA UT
+  </a>
+  <ul class="navbar-nav">
+    <li><a href="index.html">Beranda</a></li>
+    <li><a href="stok.html" class="active">Stok Bahan Ajar</a></li>
+    <li><a href="tracking.html">Tracking DO</a></li>
+  </ul>
+</nav>
+
+<div id="stok-app" class="page-container">
+
+  <!-- Page Header -->
+  <div class="page-header">
+    <h1 class="page-title">📦 Stok Bahan Ajar</h1>
+    <p class="page-subtitle">Pantau ketersediaan bahan ajar untuk seluruh UPBJJ</p>
+  </div>
+
+  <!-- Watcher Notifications -->
+  <div class="watcher-notif">
+    <div v-for="(notif, i) in notifications" :key="i" class="notif-item">
+      <span class="notif-icon">{{ notif.icon }}</span>
+      <span>{{ notif.pesan }}</span>
+    </div>
+  </div>
+
+  <!-- Alert stok kritis -->
+  <div v-if="stokKritis.length > 0" class="alert alert-warning mb-4">
+    ⚠️ <strong>Perhatian:</strong> {{ stokKritis.length }} bahan ajar memiliki stok kritis (≤10 eksemplar) — 
+    <span v-text="stokKritis.map(b => b.kode).join(', ')"></span>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Judul</div>
+      <div class="stat-value" v-text="totalJudul"></div>
+      <div class="stat-desc">bahan ajar terdaftar</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Stok</div>
+      <div class="stat-value" v-text="totalStok.toLocaleString('id')"></div>
+      <div class="stat-desc">eksemplar tersedia</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Tersedia</div>
+      <div class="stat-value" style="color:var(--secondary)" v-text="jumlahTersedia"></div>
+      <div class="stat-desc">judul siap kirim</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Stok Habis</div>
+      <div class="stat-value" style="color:var(--danger)" v-text="jumlahHabis"></div>
+      <div class="stat-desc">judul perlu restock</div>
+    </div>
+  </div>
+
+  <!-- Filter & Tabel -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <span class="card-title">Daftar Bahan Ajar</span>
+      <div class="flex items-center gap-3">
+        <!-- Search: two-way binding v-model -->
+        <div class="search-bar">
+          <svg class="search-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z"/>
+          </svg>
+          <input type="text" v-model="cariKata" placeholder="Cari kode / judul…" />
+        </div>
+        <!-- Filter Fakultas: v-model two-way binding -->
+        <select class="form-control" v-model="filterFakultas" style="width:auto">
+          <option value="">Semua Fakultas</option>
+          <option v-for="fak in daftarFakultas" :key="fak" :value="fak">{{ fak }}</option>
+        </select>
+        <!-- Filter Status -->
+        <select class="form-control" v-model="filterStatus" style="width:auto">
+          <option value="">Semua Status</option>
+          <option value="tersedia">Tersedia</option>
+          <option value="hampir habis">Hampir Habis</option>
+          <option value="habis">Habis</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Kode</th>
+            <th>Judul Bahan Ajar</th>
+            <th>Penulis</th>
+            <th>Fakultas</th>
+            <th>Edisi</th>
+            <th>Stok</th>
+            <th>Status</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- v-if untuk cek apakah hasil filter kosong -->
+          <tr v-if="bahanAjarFiltered.length === 0">
+            <td colspan="8">
+              <div class="empty-state">
+                <div class="empty-icon">🔍</div>
+                <p>Tidak ada bahan ajar yang cocok dengan filter yang dipilih.</p>
+              </div>
+            </td>
+          </tr>
+          <!-- v-for untuk list rendering -->
+          <tr v-for="(item, index) in bahanAjarFiltered" :key="item.kode">
+            <td class="code-cell" v-text="item.kode"></td>
+            <td class="title-cell">
+              <div v-text="item.judul"></div>
+            </td>
+            <td class="text-sm text-muted" v-text="item.penulis"></td>
+            <td>
+              <!-- v-bind untuk class dinamis -->
+              <span class="badge" :class="badgeFakultas(item.fakultas)">{{ item.fakultas }}</span>
+            </td>
+            <td class="text-sm" v-text="'Edisi ' + item.edisi"></td>
+            <td class="stok-cell">
+              <!-- v-bind style untuk warna stok -->
+              <span :style="{ color: warnaiStok(item.stok) }">{{ item.stok }}</span>
+              <div class="progress-wrap" style="width:80px;margin-top:4px">
+                <div class="progress-bar" :style="{ width: progressStok(item.stok) + '%', background: warnaiStok(item.stok) }"></div>
+              </div>
+            </td>
+            <td>
+              <!-- v-if / v-else-if / v-else untuk tampilkan badge status -->
+              <span v-if="item.status === 'tersedia'" class="badge badge-success">✅ Tersedia</span>
+              <span v-else-if="item.status === 'hampir habis'" class="badge badge-warning">⚠️ Hampir Habis</span>
+              <span v-else class="badge badge-danger">❌ Habis</span>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-primary" @click="pilihBahanAjar(item)">Pesan</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="padding:10px 14px;border-top:1px solid var(--gray-100);font-size:0.8rem;color:var(--gray-400)">
+      Menampilkan {{ bahanAjarFiltered.length }} dari {{ dataBahanAjar.length }} bahan ajar
+    </div>
+  </div>
+
+  <!-- Form Pemesanan -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📋 Form Pemesanan</span>
+      <!-- v-show: tampilkan info jika item sudah dipilih -->
+      <span v-show="form.kode" class="badge badge-info">
+        Memesan: {{ form.kode }}
+      </span>
+    </div>
+    <div class="card-body">
+
+      <!-- Alert validasi -->
+      <div v-if="pesanBerhasil" class="alert alert-success">
+        ✅ Pemesanan berhasil diajukan! Nomor referensi: <strong>{{ nomorReferensi }}</strong>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Kode Bahan Ajar *</label>
+          <!-- v-model two-way binding -->
+          <input class="form-control" :class="{ 'is-invalid': errors.kode }" type="text" v-model="form.kode" placeholder="Contoh: EKMA4111" />
+          <span v-if="errors.kode" class="invalid-feedback">{{ errors.kode }}</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nama Pemesan *</label>
+          <input class="form-control" :class="{ 'is-invalid': errors.namaPemesan }" type="text" v-model="form.namaPemesan" placeholder="Nama lengkap" />
+          <span v-if="errors.namaPemesan" class="invalid-feedback">{{ errors.namaPemesan }}</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">UPBJJ Tujuan *</label>
+          <select class="form-control" :class="{ 'is-invalid': errors.upbjj }" v-model="form.upbjj">
+            <option value="">-- Pilih UPBJJ --</option>
+            <option v-for="u in daftarUPBJJ" :key="u" :value="u">{{ u }}</option>
+          </select>
+          <span v-if="errors.upbjj" class="invalid-feedback">{{ errors.upbjj }}</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Jumlah Pesanan *</label>
+          <input class="form-control" :class="{ 'is-invalid': errors.jumlah }" type="number" v-model.number="form.jumlah" min="1" placeholder="Jumlah eksemplar" />
+          <span v-if="errors.jumlah" class="invalid-feedback">{{ errors.jumlah }}</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Catatan</label>
+          <input class="form-control" type="text" v-model="form.catatan" placeholder="Opsional" />
+        </div>
+      </div>
+
+      <!-- Summary computed property -->
+      <div v-if="form.kode && form.jumlah > 0" class="alert alert-info" style="margin-top:1rem">
+        📌 Ringkasan: Memesan <strong>{{ form.jumlah }} eksemplar</strong> bahan ajar 
+        <strong>{{ form.kode }}</strong> ke <strong>{{ form.upbjj || '(belum dipilih)' }}</strong>
+        <span v-if="stokBahanAjarDipilih !== null">
+          — Stok saat ini: <strong>{{ stokBahanAjarDipilih }}</strong> eksemplar
+        </span>
+      </div>
+
+      <!-- v-show: tampilkan peringatan stok tidak cukup -->
+      <div v-show="peringatanStokTidakCukup" class="alert alert-warning" style="margin-top:0.75rem">
+        ⚠️ Jumlah pesanan melebihi stok yang tersedia!
+      </div>
+
+      <div style="margin-top:1.25rem;display:flex;gap:0.75rem">
+        <button class="btn btn-primary" @click="ajukanPemesanan">Ajukan Pemesanan</button>
+        <button class="btn btn-secondary" @click="resetForm">Reset</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="js/dataBahanAjar.js"></script>
+<script src="js/stok-app.js"></script>
+</body>
+</html>

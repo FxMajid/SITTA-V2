@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tracking DO — SITTA UT</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .timeline {
+      display: flex;
+      gap: 0;
+      margin: 0.75rem 0;
+    }
+    .timeline-step {
+      flex: 1;
+      text-align: center;
+      position: relative;
+    }
+    .timeline-step::before {
+      content: '';
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      right: -50%;
+      height: 2px;
+      background: var(--gray-200);
+      z-index: 0;
+    }
+    .timeline-step:last-child::before { display: none; }
+    .timeline-step.done::before { background: var(--secondary); }
+    .timeline-dot {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--gray-200);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 6px;
+      font-size: 0.75rem;
+      position: relative;
+      z-index: 1;
+      border: 2px solid var(--white);
+    }
+    .timeline-step.done .timeline-dot { background: var(--secondary); }
+    .timeline-step.active .timeline-dot { background: var(--primary); }
+    .timeline-label { font-size: 0.65rem; color: var(--gray-400); font-weight: 600; }
+    .timeline-step.done .timeline-label { color: var(--secondary); }
+    .timeline-step.active .timeline-label { color: var(--primary); font-weight: 700; }
+
+    .detail-panel {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.5rem;
+      margin-top: 1rem;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+    }
+    .detail-item .detail-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--gray-400);
+      margin-bottom: 2px;
+    }
+    .detail-item .detail-value {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--gray-800);
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="navbar-brand">
+    <div class="logo-icon">S</div>
+    SITTA UT
+  </a>
+  <ul class="navbar-nav">
+    <li><a href="index.html">Beranda</a></li>
+    <li><a href="stok.html">Stok Bahan Ajar</a></li>
+    <li><a href="tracking.html" class="active">Tracking DO</a></li>
+  </ul>
+</nav>
+
+<div id="tracking-app" class="page-container">
+
+  <div class="page-header">
+    <h1 class="page-title">🚚 Tracking Delivery Order</h1>
+    <p class="page-subtitle">Pantau status pengiriman bahan ajar ke seluruh UPBJJ Indonesia</p>
+  </div>
+
+  <!-- Watcher Notifications -->
+  <div class="watcher-notif">
+    <div v-for="(notif, i) in notifications" :key="i" class="notif-item">
+      <span class="notif-icon">{{ notif.icon }}</span>
+      <span>{{ notif.pesan }}</span>
+    </div>
+  </div>
+
+  <!-- Stats Tracking -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total DO</div>
+      <div class="stat-value" v-text="totalDO"></div>
+      <div class="stat-desc">delivery order</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Terkirim</div>
+      <div class="stat-value" style="color:var(--secondary)" v-text="jumlahTerkirim"></div>
+      <div class="stat-desc">DO selesai</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Dalam Perjalanan</div>
+      <div class="stat-value" style="color:var(--primary)" v-text="jumlahDalamPerjalanan"></div>
+      <div class="stat-desc">sedang dikirim</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Diproses / Pending</div>
+      <div class="stat-value" style="color:var(--warning)" v-text="jumlahProsesPending"></div>
+      <div class="stat-desc">belum dikirim</div>
+    </div>
+  </div>
+
+  <!-- Pencarian DO -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <span class="card-title">🔎 Cari Delivery Order</span>
+    </div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Nomor DO</label>
+          <!-- v-model two-way binding -->
+          <input class="form-control" type="text" v-model="cariNoDO" placeholder="Contoh: DO-2025-001" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">UPBJJ Tujuan</label>
+          <select class="form-control" v-model="filterTujuan">
+            <option value="">Semua UPBJJ</option>
+            <option v-for="t in daftarTujuan" :key="t" :value="t">{{ t }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status Pengiriman</label>
+          <select class="form-control" v-model="filterStatusDO">
+            <option value="">Semua Status</option>
+            <option value="terkirim">Terkirim</option>
+            <option value="dalam perjalanan">Dalam Perjalanan</option>
+            <option value="diproses">Diproses</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Ringkasan filter -->
+      <div v-if="cariNoDO || filterTujuan || filterStatusDO" class="alert alert-info" style="margin-top:1rem">
+        📊 Menampilkan <strong>{{ doFiltered.length }}</strong> dari {{ dataTrackingDO.length }} DO
+        <span v-if="filterStatusDO"> — Status: <strong>{{ filterStatusDO }}</strong></span>
+        <span v-if="filterTujuan"> — Tujuan: <strong>{{ filterTujuan }}</strong></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabel DO -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <span class="card-title">Daftar Delivery Order</span>
+      <button class="btn btn-sm btn-secondary" @click="resetFilter">Reset Filter</button>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>No. DO</th>
+            <th>Tanggal</th>
+            <th>Bahan Ajar</th>
+            <th>Tujuan</th>
+            <th>Jumlah</th>
+            <th>Ekspedisi</th>
+            <th>Status</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="doFiltered.length === 0">
+            <td colspan="8">
+              <div class="empty-state">
+                <div class="empty-icon">📭</div>
+                <p>Tidak ada DO yang sesuai filter.</p>
+              </div>
+            </td>
+          </tr>
+          <tr v-for="item in doFiltered" :key="item.noDO">
+            <td class="code-cell" v-text="item.noDO"></td>
+            <td class="text-sm" v-text="formatTanggal(item.tanggal)"></td>
+            <td>
+              <div class="title-cell" v-text="item.judul"></div>
+              <div class="text-sm text-muted" v-text="item.kode"></div>
+            </td>
+            <td class="text-sm" v-text="item.tujuan"></td>
+            <td class="stok-cell" v-text="item.jumlah + ' eks'"></td>
+            <td class="text-sm" v-text="item.ekspedisi"></td>
+            <td>
+              <!-- v-if / v-else-if / v-else untuk badge status DO -->
+              <span v-if="item.status === 'terkirim'" class="badge badge-success">✅ Terkirim</span>
+              <span v-else-if="item.status === 'dalam perjalanan'" class="badge badge-info">🚚 Dalam Perjalanan</span>
+              <span v-else-if="item.status === 'diproses'" class="badge badge-warning">⚙️ Diproses</span>
+              <span v-else class="badge badge-gray">🕐 Pending</span>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-primary" @click="lihatDetail(item)">Detail</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Detail Panel -->
+  <div v-if="selectedDO" class="card">
+    <div class="card-header">
+      <span class="card-title">📋 Detail DO — {{ selectedDO.noDO }}</span>
+      <button class="btn btn-sm btn-secondary" @click="selectedDO = null">Tutup</button>
+    </div>
+    <div class="card-body">
+
+      <!-- Timeline pengiriman -->
+      <div style="margin-bottom:1.5rem">
+        <div class="form-label" style="margin-bottom:0.75rem">Status Pengiriman</div>
+        <div class="timeline">
+          <div class="timeline-step" :class="stepClass('pending')">
+            <div class="timeline-dot">📋</div>
+            <div class="timeline-label">Pending</div>
+          </div>
+          <div class="timeline-step" :class="stepClass('diproses')">
+            <div class="timeline-dot">⚙️</div>
+            <div class="timeline-label">Diproses</div>
+          </div>
+          <div class="timeline-step" :class="stepClass('dalam perjalanan')">
+            <div class="timeline-dot">🚚</div>
+            <div class="timeline-label">Perjalanan</div>
+          </div>
+          <div class="timeline-step" :class="stepClass('terkirim')">
+            <div class="timeline-dot">✅</div>
+            <div class="timeline-label">Terkirim</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-panel">
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-label">Nomor DO</div>
+            <div class="detail-value" v-text="selectedDO.noDO"></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Tanggal DO</div>
+            <div class="detail-value" v-text="formatTanggal(selectedDO.tanggal)"></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Bahan Ajar</div>
+            <div class="detail-value" v-text="selectedDO.judul"></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Kode</div>
+            <div class="detail-value code-cell" v-text="selectedDO.kode"></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Tujuan</div>
+            <div class="detail-value" v-text="selectedDO.tujuan"></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Jumlah</div>
+            <div class="detail-value" v-text="selectedDO.jumlah + ' eksemplar'"></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Ekspedisi</div>
+            <div class="detail-value" v-text="selectedDO.ekspedisi"></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">No. Resi</div>
+            <!-- v-if untuk tampilkan resi atau "belum ada" -->
+            <div v-if="selectedDO.noResi" class="detail-value code-cell" v-text="selectedDO.noResi"></div>
+            <div v-else class="detail-value text-muted">Belum tersedia</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Estimasi Tiba</div>
+            <div v-if="selectedDO.estimasiTiba" class="detail-value" v-text="formatTanggal(selectedDO.estimasiTiba)"></div>
+            <div v-else class="detail-value text-muted">—</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Aktual Tiba</div>
+            <!-- v-if/v-else-if/v-else tergantung kondisi -->
+            <div v-if="selectedDO.aktualTiba" class="detail-value" style="color:var(--secondary)" v-text="formatTanggal(selectedDO.aktualTiba)"></div>
+            <div v-else-if="selectedDO.status === 'terkirim'" class="detail-value" style="color:var(--warning)">Menunggu konfirmasi</div>
+            <div v-else class="detail-value text-muted">Belum tiba</div>
+          </div>
+        </div>
+
+        <!-- Catatan keterlambatan -->
+        <div v-if="terlambat(selectedDO)" class="alert alert-danger" style="margin-top:1rem">
+          ⏰ Perhatian: Pengiriman ini melewati estimasi tanggal tiba ({{ formatTanggal(selectedDO.estimasiTiba) }})
+        </div>
+        <div v-else-if="selectedDO.status === 'terkirim'" class="alert alert-success" style="margin-top:1rem">
+          🎉 Pengiriman selesai dan tepat waktu!
+        </div>
+      </div>
+
+      <!-- Update Status Form -->
+      <div style="margin-top:1.5rem">
+        <div class="form-label" style="margin-bottom:0.75rem">Update Status DO</div>
+        <div class="flex items-center gap-3">
+          <select class="form-control" v-model="statusBaru" style="max-width:200px">
+            <option value="">-- Pilih Status --</option>
+            <option value="pending">Pending</option>
+            <option value="diproses">Diproses</option>
+            <option value="dalam perjalanan">Dalam Perjalanan</option>
+            <option value="terkirim">Terkirim</option>
+          </select>
+          <!-- v-bind:disabled jika statusBaru belum dipilih -->
+          <button class="btn btn-success" :disabled="!statusBaru" @click="updateStatus">Simpan Status</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="js/dataBahanAjar.js"></script>
+<script src="js/tracking-app.js"></script>
+</body>
+</html>
